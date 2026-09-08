@@ -1,3 +1,39 @@
+const BRIDGE_URL = "http://127.0.0.1:8765";
+
+async function sendEvent(type, data) {
+    try {
+        const response = await fetch(
+            `${BRIDGE_URL}/events`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                },
+
+                body: JSON.stringify({
+                    type,
+                    timestamp: Date.now(),
+                    data,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            console.warn(
+                PREFIX,
+                `Bridge returned HTTP ${response.status}`
+            );
+        }
+    } catch (error) {
+        console.debug(
+            PREFIX,
+            "Bridge unavailable:",
+            error.message
+        );
+    }
+}
+
 (function djNarrationProbe() {
     const PREFIX = "[Shkila DJ Probe]";
     const NARRATION_KINDS = ["intro", "jump", "outro"];
@@ -257,7 +293,7 @@
         return result;
     }
 
-    
+
 
     function createQueueItem(item, queueIndex) {
         const md = getMetadata(item);
@@ -475,6 +511,35 @@
         );
 
         console.groupEnd();
+        sendEvent(
+    "prefetch",
+    {
+        key: narration.key,
+
+        kind: narration.kind,
+
+        trackUri: narration.trackUri,
+        spotifyId: narration.spotifyId,
+
+        trackName: narration.trackName,
+        artist: narration.artist,
+        album: narration.album,
+
+        segment: narration.segment,
+
+        decisionId: narration.decisionId,
+        commentaryId: narration.commentaryId,
+        commentaryType: narration.commentaryType,
+
+        ttsProvider: narration.ttsProvider,
+        voice: narration.voice,
+
+        ssml: narration.ssml,
+        text: narration.text,
+
+        queueIndex: narration.queueIndex,
+    }
+);
     }
 
 
@@ -691,6 +756,49 @@
             kind,
             manifestSsml
         );
+
+        sendEvent(
+    "start",
+    {
+        kind,
+        provider,
+
+        narrationUri:
+            item?.uri ?? null,
+
+        spotifyId:
+            getSpotifyId(item?.uri),
+
+        decisionId,
+
+        actualSsml:
+            manifestSsml,
+
+        actualText:
+            ssmlToText(manifestSsml),
+
+        matched:
+            match !== null,
+
+        matchMethod:
+            method,
+
+        matchedNarrationKey:
+            match?.key ?? null,
+
+        trackUri:
+            match?.trackUri ?? null,
+
+        trackName:
+            match?.trackName ?? null,
+
+        artist:
+            match?.artist ?? null,
+
+        segment:
+            match?.segment ?? null,
+    }
+);
 
         console.group(
             `%c[DJ START] ${kind.toUpperCase()}`,
