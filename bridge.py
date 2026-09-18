@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from typing import Any
 from enum import Enum
 
+from translator import (
+    TranslationContext,
+    load_translator
+)
+
 
 class SpotifyDJEvent(BaseModel):
     type: str
@@ -55,11 +60,6 @@ narration_cache: dict[str, Narration] = {}
 
 processing_queue: asyncio.Queue[str] = asyncio.Queue()
 
-async def translate(text: str) -> str:
-    # will do soomething later
-    await asyncio.sleep(0.5)
-    return f"TRANSLATED: {text}"
-
 async def narration_worker():
     print("[shkila-worker] started")
 
@@ -83,7 +83,13 @@ async def narration_worker():
             )
 
             narration.translated_text = (
-                await translate(narration.text)
+                await translator.translate(TranslationContext(
+                    text=narration.text,
+                    kind=narration.kind,
+                    artist=narration.artist,
+                    track_name=narration.track_name,
+                    album=narration.album
+                ))
             )
 
             narration.status = NarrationStatus.READY
@@ -124,6 +130,8 @@ async def handle_prefetch(data: dict[str, Any]):
         )
         return
 
+    
+
     narration = Narration(
         key=key,
 
@@ -151,10 +159,20 @@ async def handle_prefetch(data: dict[str, Any]):
 
     narration_cache[key] = narration
 
+    
+
     print()
     print("=" * 60)
     print("[PREFETCH]")
     print("=" * 60)
+
+    if narration.kind not in prefetch_kinds:
+            print(
+            f"[PREFETCH] skipping "
+            f"{narration.kind}"
+            )
+            return
+
 
     print(
         f"{narration.artist} — "
@@ -178,6 +196,7 @@ async def handle_prefetch(data: dict[str, Any]):
     print(
         narration.text
     )
+    
     await processing_queue.put(
         narration.key
     )
@@ -259,6 +278,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True
+)
+
+translator, prefetch_kinds = (
+    load_translator("config.yaml")
 )
 
 @app.on_event("startup")

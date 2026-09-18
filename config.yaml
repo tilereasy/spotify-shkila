@@ -1,0 +1,23 @@
+llm:
+  base_url: "https://openrouter.ai/api/v1"
+  api_key: ${DJ_LLM_API_KEY}
+  model: "deepseek/deepseek-v4-flash-0731:free"
+
+  timeout: 30
+  max_retries: 2
+
+  temperature: 0.4
+
+  extra_headers: {}
+
+
+translation:
+  target_language: "Russian"
+  style: ""
+  
+
+  # + jump as possible option
+  prefetch_kinds:
+    - intro
+    - outro
+
