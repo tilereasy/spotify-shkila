@@ -13,6 +13,12 @@ from translator import (
     load_translator
 )
 
+from tts import (load_tts)
+
+from hashlib import sha256
+from pathlib import Path
+
+AUDIO_DIR = Path("cache/audio")
 
 class SpotifyDJEvent(BaseModel):
     type: str
@@ -26,7 +32,8 @@ class Event(BaseModel):
 
 class NarrationStatus(str, Enum):
     PENDING = "pending"
-    PROCESSING = "processing"
+    TRANSLATING = "translating"
+    SYNTHESIZING = "synthesizing"
     READY = "ready"
     FAILED = "failed"
 
@@ -56,12 +63,24 @@ class Narration(BaseModel):
     status: NarrationStatus = NarrationStatus.PENDING
     error: str | None = None
 
+    audio_path: str | None = None
+
 narration_cache: dict[str, Narration] = {}
 
 processing_queue: asyncio.Queue[str] = asyncio.Queue()
 
+def audio_cache_path(
+    narration_key: str,
+) -> Path:
+    digest = sha256(
+        narration_key.encode("utf-8")
+    ).hexdigest()
+
+    return AUDIO_DIR / f"{digest}.wav"
+
+
 async def narration_worker():
-    print("[shkila-worker] started")
+    print("[worker] started")
 
     while True:
         key = await processing_queue.get()
@@ -73,37 +92,73 @@ async def narration_worker():
             continue
 
         try:
-            narration.status = NarrationStatus.PROCESSING
+            narration.status = (
+                NarrationStatus.TRANSLATING
+            )
 
-            print()
             print(
-                f"[PROCESS] "
+                f"[TRANSLATING] "
                 f"{narration.artist} — "
                 f"{narration.track_name}"
             )
 
             narration.translated_text = (
-                await translator.translate(TranslationContext(
-                    text=narration.text,
-                    kind=narration.kind,
-                    artist=narration.artist,
-                    track_name=narration.track_name,
-                    album=narration.album
-                ))
+                await translator.translate(
+                    TranslationContext(
+                        text=narration.text,
+                        kind=narration.kind,
+
+                        artist=narration.artist,
+                        track_name=narration.track_name,
+                        album=narration.album,
+                    )
+                )
             )
 
-            narration.status = NarrationStatus.READY
+            print(
+                "[TRANSLATED]",
+                narration.translated_text,
+            )
+
+            narration.status = (
+                NarrationStatus.SYNTHESIZING
+            )
+
+            output_path = (
+                audio_cache_path(
+                    narration.key
+                )
+            )
+
+            print(
+                f"[SYNTHESIZING] "
+                f"{output_path}"
+            )
+
+            await asyncio.to_thread(
+                tts.synthesize,
+
+                text=narration.translated_text,
+                output_path=output_path,
+            )
+
+            narration.audio_path = str(
+                output_path
+            )
+
+            narration.status = (
+                NarrationStatus.READY
+            )
 
             print(
                 f"[READY] {key}"
             )
 
-            print(
-                narration.translated_text
+        except Exception as error:
+            narration.status = (
+                NarrationStatus.FAILED
             )
 
-        except Exception as error:
-            narration.status = NarrationStatus.FAILED
             narration.error = str(error)
 
             print(
@@ -283,6 +338,11 @@ app.add_middleware(
 translator, prefetch_kinds = (
     load_translator("config.yaml")
 )
+
+tts = load_tts("config.yaml")
+
+
+
 
 @app.on_event("startup")
 async def startup():

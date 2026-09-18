@@ -5,3 +5,6 @@ __pycache__
 # miscellaneous
 misc
 
+# these files created while program is running
+voices/*
+cache/*

@@ -130,7 +130,6 @@ Original narration:
 {context.text}
 """.strip()
 
-
 def load_translator(
     path: str | Path = "config.yaml",
 ) -> tuple[LLMTranslator, set[str]]:
