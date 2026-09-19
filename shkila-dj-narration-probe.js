@@ -1,4 +1,71 @@
 const BRIDGE_URL = "http://127.0.0.1:8765";
+const PREFIX = "[Shkila DJ Probe]";
+
+let activeReplacement = null;
+
+
+function getNarrationAudioUrl(key) {
+    return (
+        `${BRIDGE_URL}/narrations/` +
+        `${encodeURIComponent(key)}/audio`
+    );
+}
+
+function handleReplacementSongChange() {
+    const replacement =
+        activeReplacement;
+
+    if (
+        !replacement ||
+        replacement.finishing
+    ) {
+        return;
+    }
+
+    console.log(
+        PREFIX,
+        "Spotify changed item during replacement; cancelling"
+    );
+
+    stopReplacementAudio(replacement);
+
+    Spicetify.Player.play();
+}
+
+
+function stopReplacementAudio(
+    replacement = activeReplacement
+) {
+    if (
+        !replacement ||
+        activeReplacement !== replacement
+    ) {
+        return;
+    }
+
+    const {
+        audio,
+        objectUrl,
+    } = activeReplacement;
+
+    activeReplacement = null;
+
+    replacement.abortController?.abort();
+
+    try {
+        audio?.pause();
+
+        if (audio) {
+            audio.currentTime = 0;
+        }
+    } catch {
+        // ignore
+    }
+
+    if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
 
 async function sendEvent(type, data) {
     try {
@@ -34,8 +101,286 @@ async function sendEvent(type, data) {
     }
 }
 
+async function playReplacementNarration(
+    narration,
+    narrationItem
+) {
+    if (activeReplacement) {
+        console.warn(
+            PREFIX,
+            "Replacement already active"
+        );
+
+        return;
+    }
+
+    const originalUri =
+        narrationItem?.uri ?? null;
+
+    console.log(
+        PREFIX,
+        "Replacing narration:",
+        narration.artist,
+        "—",
+        narration.trackName
+    );
+
+    const replacement = {
+        audio: null,
+        objectUrl: null,
+
+        originalUri,
+
+        narrationKey:
+            narration.key,
+
+        finishing: false,
+        abortController:
+            new AbortController(),
+    };
+
+    activeReplacement = replacement;
+
+    Spicetify.Player.pause();
+
+    try {
+        const response = await fetch(
+            getNarrationAudioUrl(
+                narration.key
+            ),
+            {
+                cache: "no-store",
+                signal:
+                    replacement
+                        .abortController
+                        .signal,
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Audio unavailable: HTTP ${response.status}`
+            );
+        }
+
+        const blob =
+            await response.blob();
+
+        if (
+            activeReplacement !==
+            replacement
+        ) {
+            return;
+        }
+
+        replacement.objectUrl =
+            URL.createObjectURL(blob);
+
+        const audio =
+            new Audio(
+                replacement.objectUrl
+            );
+
+        replacement.audio = audio;
+
+        audio.volume =
+            Spicetify.Player.getVolume();
+
+        audio.muted =
+            Spicetify.Player.getMute();
+
+        audio.addEventListener(
+            "ended",
+            async () => {
+                await finishReplacement(
+                    replacement
+                );
+            },
+            {
+                once: true,
+            }
+        );
+
+        audio.addEventListener(
+            "error",
+            () => {
+                failReplacement(
+                    new Error(
+                        "HTMLAudioElement playback error"
+                    ),
+                    replacement
+                );
+            },
+            {
+                once: true,
+            }
+        );
+
+        await audio.play();
+
+        if (
+            activeReplacement !==
+            replacement
+        ) {
+            return;
+        }
+
+        console.log(
+            PREFIX,
+            "Replacement playback started"
+        );
+
+    } catch (error) {
+        if (
+            activeReplacement !==
+            replacement
+        ) {
+            return;
+        }
+
+        console.error(
+            PREFIX,
+            "Replacement failed:",
+            error
+        );
+
+        stopReplacementAudio(
+            replacement
+        );
+
+        Spicetify.Player.play();
+    }
+}
+
+async function finishReplacement(
+    replacement = activeReplacement
+) {
+    if (
+        !replacement ||
+        activeReplacement !== replacement
+    ) {
+        return;
+    }
+
+    replacement.finishing = true;
+
+    console.log(
+        PREFIX,
+        "Replacement finished"
+    );
+
+    replacement.audio.pause();
+
+    if (replacement.objectUrl) {
+        URL.revokeObjectURL(
+            replacement.objectUrl
+        );
+
+        replacement.objectUrl = null;
+    }
+
+    let changed = false;
+
+    try {
+        changed = await nextAndWait();
+    } catch (error) {
+        console.error(
+            PREFIX,
+            "Cannot skip replaced narration:",
+            error
+        );
+    }
+
+    if (
+        activeReplacement === replacement
+    ) {
+        activeReplacement = null;
+    }
+
+    if (!changed) {
+        console.warn(
+            PREFIX,
+            "No songchange after next(); resuming anyway"
+        );
+    }
+
+    Spicetify.Player.play();
+}
+
+function nextAndWait(
+    timeout = 2000
+) {
+    return new Promise(
+        (resolve, reject) => {
+            let finished = false;
+
+            const cleanup = () => {
+                if (finished) {
+                    return;
+                }
+
+                finished = true;
+
+                Spicetify.Player.removeEventListener(
+                    "songchange",
+                    onChange
+                );
+
+                clearTimeout(timer);
+            };
+
+            const onChange = () => {
+                cleanup();
+                resolve(true);
+            };
+
+            Spicetify.Player.addEventListener(
+                "songchange",
+                onChange
+            );
+
+            const timer =
+                setTimeout(
+                    () => {
+                        cleanup();
+                        resolve(false);
+                    },
+                    timeout
+                );
+
+            try {
+                Spicetify.Player.next();
+            } catch (error) {
+                cleanup();
+                reject(error);
+            }
+        }
+    );
+}
+
+function failReplacement(
+    error,
+    replacement = activeReplacement
+) {
+    if (
+        !replacement ||
+        activeReplacement !== replacement
+    ) {
+        return;
+    }
+
+    console.error(
+        PREFIX,
+        "Replacement playback error:",
+        error
+    );
+
+    stopReplacementAudio(replacement);
+
+    Spicetify.Player.play();
+}
+
 (function djNarrationProbe() {
-    const PREFIX = "[Shkila DJ Probe]";
     const NARRATION_KINDS = ["intro", "jump", "outro"];
 
     const knownNarrations = new Map();
@@ -800,6 +1145,13 @@ async function sendEvent(type, data) {
     }
 );
 
+        if (match) {
+            void playReplacementNarration(
+                match,
+                item
+            );
+        }
+
         console.group(
             `%c[DJ START] ${kind.toUpperCase()}`,
             "font-weight:bold;color:#ffb347"
@@ -932,6 +1284,11 @@ async function sendEvent(type, data) {
         }
 
         log("started v2");
+
+        Spicetify.Player.addEventListener(
+            "songchange",
+            handleReplacementSongChange
+        );
 
         scan();
 

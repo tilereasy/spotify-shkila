@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
 
 import asyncio
 
@@ -365,6 +367,56 @@ async def narrations():
 @app.get("/narrations/{key}")
 async def narration(key: str):
     return narration_cache.get(key)
+
+@app.get("/narrations/{key}/audio")
+async def narration_audio(key: str):
+    narration = narration_cache.get(key)
+
+    if narration is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Narration not found",
+        )
+
+    if narration.status != NarrationStatus.READY:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Narration is not ready: {narration.status}",
+        )
+
+    if not narration.audio_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Narration has no audio",
+        )
+
+    path = Path(narration.audio_path)
+
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file does not exist",
+        )
+
+    return FileResponse(
+        path,
+        media_type="audio/wav",
+        headers={
+            "Cache-Control": "no-store",
+        },
+    )
+
+@app.get("/test-audio")
+async def test_audio():
+    return FileResponse(
+        "test.wav",
+        media_type="audio/wav",
+    )
+
+
+
+
+
 
 @app.post("/events")
 async def events(event: Event):
