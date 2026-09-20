@@ -315,7 +315,7 @@ async def handle_start(data: dict[str, Any]):
             narration.translated_text
         )
 
-    elif narration.status == NarrationStatus.PROCESSING:
+    elif narration.status == NarrationStatus.TRANSLATING:
         print(
             "Translation is still processing!"
         )
