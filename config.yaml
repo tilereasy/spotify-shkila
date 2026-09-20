@@ -1,7 +1,7 @@
 llm:
-  base_url: "https://openrouter.ai/api/v1"
+  base_url: "" # your llm provider
   api_key: ${DJ_LLM_API_KEY}
-  model: "deepseek/deepseek-v4-flash-0731:free"
+  model: ""
 
   timeout: 30
   max_retries: 2
@@ -12,7 +12,7 @@ llm:
 
 
 translation:
-  target_language: "Russian"
+  target_language: ""
   style: ""
   
 

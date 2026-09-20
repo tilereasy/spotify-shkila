@@ -106,8 +106,6 @@ Rules:
 - Do not invent facts about artists, tracks, albums or the listener.
 - Prefer idiomatic {self.target_language} over literal translation.
 - Do not use Markdown.
-- Normally keep roughly the same amount of information as
-  the original narration.
 
 Desired DJ style:
 

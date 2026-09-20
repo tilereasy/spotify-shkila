@@ -134,6 +134,9 @@ async function playReplacementNarration(
         narrationKey:
             narration.key,
 
+        narrationKind:
+            narration.kind,
+
         finishing: false,
         abortController:
             new AbortController(),
@@ -279,36 +282,81 @@ async function finishReplacement(
         replacement.objectUrl = null;
     }
 
+    // Release the completed narration before switching tracks.
+    // The songchange handler can then start a replacement for an
+    // immediately following narration (for example, outro -> intro).
+    activeReplacement = null;
+
     let changed = false;
 
     try {
-        changed = await nextAndWait();
+        changed =
+            replacement.narrationKind ===
+            "intro"
+                ? await finishCurrentItemAndWait()
+                : await nextAndWait();
     } catch (error) {
         console.error(
             PREFIX,
-            "Cannot skip replaced narration:",
+            "Cannot advance past replaced narration:",
             error
         );
-    }
-
-    if (
-        activeReplacement === replacement
-    ) {
-        activeReplacement = null;
     }
 
     if (!changed) {
         console.warn(
             PREFIX,
-            "No songchange after next(); resuming anyway"
+            "No songchange after completing replacement; resuming anyway"
         );
     }
 
-    Spicetify.Player.play();
+    // A consecutive narration may already have paused Spotify and
+    // started loading its own audio. Do not resume the built-in DJ
+    // over that replacement.
+    if (!activeReplacement) {
+        Spicetify.Player.play();
+    }
 }
 
 function nextAndWait(
     timeout = 2000
+) {
+    return runAndWaitForSongChange(
+        () => {
+            Spicetify.Player.next();
+        },
+        timeout
+    );
+}
+
+function finishCurrentItemAndWait(
+    timeout = 2000
+) {
+    return runAndWaitForSongChange(
+        () => {
+            const duration =
+                Spicetify.Player.getDuration();
+
+            if (
+                Number.isFinite(duration) &&
+                duration > 0
+            ) {
+                Spicetify.Player.seek(duration);
+            } else {
+                // Spicetify treats values from 0 to 1 as a
+                // percentage of the current item's duration.
+                Spicetify.Player.seek(1);
+            }
+
+            Spicetify.Player.play();
+        },
+        timeout
+    );
+}
+
+function runAndWaitForSongChange(
+    action,
+    timeout
 ) {
     return new Promise(
         (resolve, reject) => {
@@ -349,7 +397,7 @@ function nextAndWait(
                 );
 
             try {
-                Spicetify.Player.next();
+                action();
             } catch (error) {
                 cleanup();
                 reject(error);
