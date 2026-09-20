@@ -1,0 +1,40 @@
+services:
+  shkila-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: spotify-shkila
+    
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    environment:
+      - DJ_LLM_API_KEY=${DJ_LLM_API_KEY}
+      - HF_HOME=/cache/huggingface
+    
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./voices:/app/voices:ro
+      - ./cache/audio:/app/cache/audio
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health')"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 3
+      start_period: 90s
