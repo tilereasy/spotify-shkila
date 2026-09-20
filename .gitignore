@@ -7,4 +7,7 @@ misc
 
 # these files created while program is running
 voices/*
-cache/*
+app/cache/*
+
+# your config
+config.yaml

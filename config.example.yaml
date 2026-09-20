@@ -1,0 +1,49 @@
+llm:
+  base_url: "yourprovider.ru/v1"
+  api_key: ${DJ_LLM_API_KEY}
+  model: "gpt100eg"
+
+  timeout: 30
+  max_retries: 2
+
+  temperature: 0.4
+
+  extra_headers: {}
+
+
+translation:
+  target_language: ""
+  style: ""
+  
+
+  # + jump as possible option
+  prefetch_kinds:
+    - intro
+    - outro
+
+
+tts:
+  backend: "omnivoice"
+
+  model: "k2-fsa/OmniVoice"
+  device: "cuda:0"
+  dtype: "float16"
+
+  language: "ru"
+
+  output_dir: "./cache/audio"
+
+  generation:
+    num_steps: 32
+    speed: 1.0
+
+
+voice:
+  mode: "clone"
+
+  design:
+    instruct: "male, young adult, low pitch"
+    
+  clone: # clon works better
+    ref_audio: "./voices/reference.wav"
+    ref_text: null # omnivoice can launch Whisper by itself
