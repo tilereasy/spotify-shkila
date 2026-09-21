@@ -28,6 +28,8 @@
 ### 1. Настройте конфигурацию
 
 ```bash
+git clone https://github.com/tilereasy/spotify-shkila.git
+cd spotify-shkila
 cp config.example.yaml config.yaml
 mkdir -p voices cache/audio
 ```

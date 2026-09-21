@@ -1,5 +1,5 @@
 llm:
-  base_url: "yourprovider.ru/v1"
+  base_url: "https://api.example.com/v1"
   api_key: ${DJ_LLM_API_KEY}
   model: "gpt100eg"
 
